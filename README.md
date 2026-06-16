@@ -106,15 +106,7 @@ https://<アプリ名>.fly.dev
 
 ### 手順
 
-**1. 環境変数ファイルを作成**
-
-```bash
-cp backend/config/env.php.example backend/config/env.php
-```
-
-`env.php` を編集し、`JWT_SECRET` に任意の文字列を設定してください。
-
-**2. ビルドと起動**
+**1. ビルドと起動**
 
 ```bash
 docker build -t family-chatboard .

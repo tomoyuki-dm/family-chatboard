@@ -8,12 +8,21 @@ import { api } from './api/client'
 export function App() {
   const { user, isLoggedIn, login, logout } = useAuth()
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null)
+  const [setupError, setSetupError]   = useState(false)
 
   useEffect(() => {
     api.checkSetup()
       .then(({ needed }) => setSetupNeeded(needed))
-      .catch(() => setSetupNeeded(false))
+      .catch(() => setSetupError(true))
   }, [])
+
+  if (setupError) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <p className="text-red-500 text-sm">サーバーに接続できません。<br />しばらく待ってから再読み込みしてください。</p>
+      </div>
+    )
+  }
 
   if (setupNeeded === null) {
     return (

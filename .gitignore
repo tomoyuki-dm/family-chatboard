@@ -6,7 +6,6 @@ frontend/dist/
 
 # 環境変数・機密情報（絶対にコミットしない）
 frontend/.env.local
-backend/config/env.php
 
 # 初回のみ使うスクリプト
 backend/setup.php
