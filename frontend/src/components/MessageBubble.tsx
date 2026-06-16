@@ -11,7 +11,7 @@ interface Props {
 }
 
 function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString('ja-JP', {
+  return new Date(dateStr.replace(' ', 'T') + 'Z').toLocaleTimeString('ja-JP', {
     hour:   '2-digit',
     minute: '2-digit',
   })
