@@ -160,4 +160,15 @@ export const api = {
       body: JSON.stringify({ action: 'switch', log_id: logId }),
     })
   },
+
+  adminGetLineSettings() {
+    return req<{ enabled: boolean; channel_access_token: string; to_user_id: string }>('/admin/line_settings.php')
+  },
+
+  adminUpdateLineSettings(data: { enabled: boolean; channel_access_token: string; to_user_id: string }) {
+    return req<{ ok: boolean }>('/admin/line_settings.php', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
 }

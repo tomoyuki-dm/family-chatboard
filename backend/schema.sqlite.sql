@@ -70,3 +70,8 @@ CREATE TABLE IF NOT EXISTS sse_tokens (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 CREATE INDEX IF NOT EXISTS idx_expires ON sse_tokens(expires_at);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);

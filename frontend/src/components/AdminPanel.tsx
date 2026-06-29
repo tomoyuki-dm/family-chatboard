@@ -42,7 +42,14 @@ export function AdminPanel({ currentUserId, onClose }: Props) {
   const [addLoading, setAddLoading]   = useState(false)
   const [logs, setLogs]               = useState<LogSession[]>([])
   const [logLoading, setLogLoading]   = useState(false)
-  const [tab, setTab]                 = useState<'users' | 'logs'>('users')
+  const [tab, setTab]                 = useState<'users' | 'logs' | 'line'>('users')
+
+  const [lineEnabled, setLineEnabled] = useState(false)
+  const [lineToken, setLineToken]     = useState('')
+  const [lineToId, setLineToId]       = useState('')
+  const [lineLoading, setLineLoading] = useState(false)
+  const [lineSaving, setLineSaving]   = useState(false)
+  const [lineSaved, setLineSaved]     = useState(false)
 
   useEffect(() => { void load() }, [])
 
@@ -57,6 +64,35 @@ export function AdminPanel({ currentUserId, onClose }: Props) {
   }
 
   useEffect(() => { if (tab === 'logs') void loadLogs() }, [tab])
+
+  async function loadLineSettings() {
+    setLineLoading(true)
+    try {
+      const s = await api.adminGetLineSettings()
+      setLineEnabled(s.enabled)
+      setLineToken(s.channel_access_token)
+      setLineToId(s.to_user_id)
+    } finally {
+      setLineLoading(false)
+    }
+  }
+
+  useEffect(() => { if (tab === 'line') void loadLineSettings() }, [tab])
+
+  async function handleSaveLineSettings() {
+    setLineSaving(true)
+    setLineSaved(false)
+    try {
+      await api.adminUpdateLineSettings({
+        enabled: lineEnabled,
+        channel_access_token: lineToken.trim(),
+        to_user_id: lineToId.trim(),
+      })
+      setLineSaved(true)
+    } finally {
+      setLineSaving(false)
+    }
+  }
 
   async function handleNewLog() {
     if (!confirm('現在のチャット履歴をアーカイブして新しいログを開始しますか？\n（全メンバーの画面が次の再接続時に更新されます）')) return
@@ -126,7 +162,7 @@ export function AdminPanel({ currentUserId, onClose }: Props) {
 
         {/* タブ */}
         <div className="flex border-b border-gray-100 flex-shrink-0">
-          {(['users', 'logs'] as const).map(t => (
+          {(['users', 'logs', 'line'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -134,13 +170,66 @@ export function AdminPanel({ currentUserId, onClose }: Props) {
                 tab === t ? 'text-green-700 border-b-2 border-green-600' : 'text-gray-400 hover:text-gray-600'
               }`}
             >
-              {t === 'users' ? 'メンバー管理' : 'ログ管理'}
+              {t === 'users' ? 'メンバー管理' : t === 'logs' ? 'ログ管理' : 'LINE通知'}
             </button>
           ))}
         </div>
 
         <div className="overflow-y-auto flex-1 p-5 space-y-5">
-          {tab === 'logs' ? (
+          {tab === 'line' ? (
+            /* LINE通知設定タブ */
+            <div className="space-y-4">
+              {lineLoading ? (
+                <p className="text-sm text-gray-400">読み込み中...</p>
+              ) : (
+                <>
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">子どもの投稿をLINEに通知する</span>
+                    <input
+                      type="checkbox"
+                      checked={lineEnabled}
+                      onChange={e => setLineEnabled(e.target.checked)}
+                      className="w-5 h-5 accent-green-600"
+                    />
+                  </label>
+
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">Channel Access Token</label>
+                    <input
+                      type="password"
+                      value={lineToken}
+                      onChange={e => setLineToken(e.target.value)}
+                      placeholder="LINE Developersコンソールで発行したトークン"
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">送信先 userId / グループID</label>
+                    <input
+                      type="text"
+                      value={lineToId}
+                      onChange={e => setLineToId(e.target.value)}
+                      placeholder="U4af4980629..."
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                    />
+                  </div>
+
+                  <p className="text-xs text-gray-400">
+                    子どもロールのユーザーが「文字列のみ」のメッセージを投稿したときだけ通知されます（ファイル送信は対象外）。
+                  </p>
+
+                  <button
+                    onClick={handleSaveLineSettings}
+                    disabled={lineSaving}
+                    className="w-full bg-green-600 text-white font-bold rounded-xl py-2.5 text-sm disabled:opacity-40 hover:bg-green-700 active:bg-green-800 transition-colors"
+                  >
+                    {lineSaving ? '保存中...' : lineSaved ? '保存しました' : '保存'}
+                  </button>
+                </>
+              )}
+            </div>
+          ) : tab === 'logs' ? (
             /* ログ管理タブ */
             <div className="space-y-4">
               <div>

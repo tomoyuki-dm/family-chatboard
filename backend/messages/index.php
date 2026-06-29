@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config/cors.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/jwt.php';
+require_once __DIR__ . '/../config/line.php';
 
 $claims = require_auth();
 $uid    = (int)$claims['sub'];
@@ -125,6 +126,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $msg['user_id']    = (int)$msg['user_id'];
     $msg['read_count'] = 0;
     $msg['read_by']    = [(int)$uid]; // 自分だけ既読
+
+    line_notify_on_message((string)($claims['role'] ?? ''), $msgType, (string)$msg['user_name'], $bodyStr);
 
     echo json_encode($msg);
 

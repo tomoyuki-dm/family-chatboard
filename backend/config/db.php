@@ -43,3 +43,16 @@ function fetch_current_log_id(): int {
     $row = db()->query('SELECT id FROM log_sessions WHERE is_current = 1 LIMIT 1')->fetch();
     return $row ? (int)$row['id'] : 1;
 }
+
+function get_setting(string $key, string $default = ''): string {
+    $stmt = db()->prepare('SELECT value FROM app_settings WHERE key = :key');
+    $stmt->execute([':key' => $key]);
+    $row = $stmt->fetch();
+    return $row ? (string)$row['value'] : $default;
+}
+
+function set_setting(string $key, string $value): void {
+    db()->prepare('INSERT INTO app_settings (key, value) VALUES (:key, :value)
+                    ON CONFLICT(key) DO UPDATE SET value = :value2')
+        ->execute([':key' => $key, ':value' => $value, ':value2' => $value]);
+}
