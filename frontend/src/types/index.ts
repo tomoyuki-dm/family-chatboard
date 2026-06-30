@@ -32,3 +32,12 @@ export interface ReadUpdate {
   read_count: number
   read_by: number[]
 }
+
+export type CallSignalType = 'offer' | 'answer' | 'ice' | 'hangup' | 'reject' | 'busy'
+
+export interface CallSignal {
+  from_user_id: number
+  from_name: string
+  type: CallSignalType
+  payload: unknown
+}

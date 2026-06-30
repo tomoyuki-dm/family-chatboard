@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../api/client'
 import { useSSE } from '../hooks/useSSE'
+import { useCall } from '../hooks/useCall'
 import { MessageBubble } from './MessageBubble'
 import { MessageInput } from './MessageInput'
 import { MemberList } from './MemberList'
 import { AdminPanel } from './AdminPanel'
+import { CallOverlay } from './CallOverlay'
 import type { Message, PresenceMap, ReadUpdate, User } from '../types'
 
 interface Props {
@@ -113,6 +115,8 @@ export function ChatRoom({ currentUser, onLogout }: Props) {
 
   const getLastId = useCallback(() => lastIdRef.current, [])
 
+  const call = useCall()
+
   async function handleDelete(messageId: number) {
     if (!confirm('このメッセージを削除しますか？')) return
     try {
@@ -125,7 +129,14 @@ export function ChatRoom({ currentUser, onLogout }: Props) {
     }
   }
 
-  useSSE({ onMessage: handleMessage, onPresence: handlePresence, onRead: handleRead, onDeleted: handleDeleted, getLastId })
+  useSSE({
+    onMessage:    handleMessage,
+    onPresence:   handlePresence,
+    onRead:       handleRead,
+    onDeleted:    handleDeleted,
+    onCallSignal: call.handleSignal,
+    getLastId,
+  })
 
   async function handleSend(text: string) {
     const msg = await api.sendMessage(text)
@@ -186,6 +197,8 @@ export function ChatRoom({ currentUser, onLogout }: Props) {
         members={members}
         presence={presence}
         currentUserId={currentUser.id}
+        callDisabled={call.state !== 'idle'}
+        onCall={call.startCall}
       />
 
       {/* メッセージエリア */}
@@ -227,6 +240,18 @@ export function ChatRoom({ currentUser, onLogout }: Props) {
       {showAdmin && (
         <AdminPanel currentUserId={currentUser.id} onClose={() => setShowAdmin(false)} />
       )}
+
+      <CallOverlay
+        state={call.state}
+        peerName={call.peerName}
+        incomingName={call.incomingName}
+        muted={call.muted}
+        remoteAudioRef={call.remoteAudioRef}
+        onAccept={call.acceptCall}
+        onReject={call.rejectCall}
+        onHangup={call.hangup}
+        onToggleMute={call.toggleMute}
+      />
     </div>
   )
 }

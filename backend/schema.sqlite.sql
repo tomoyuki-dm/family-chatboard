@@ -75,3 +75,15 @@ CREATE TABLE IF NOT EXISTS app_settings (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS call_signals (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_user_id INTEGER NOT NULL,
+  to_user_id   INTEGER NOT NULL,
+  type         TEXT NOT NULL,
+  payload      TEXT NOT NULL,
+  created_at   TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (from_user_id) REFERENCES users(id),
+  FOREIGN KEY (to_user_id)   REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_call_to ON call_signals(to_user_id, id);

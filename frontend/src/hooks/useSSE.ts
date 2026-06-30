@@ -1,19 +1,20 @@
 import { useEffect, useRef } from 'react'
 import { api } from '../api/client'
-import type { Message, PresenceMap, ReadUpdate } from '../types'
+import type { CallSignal, Message, PresenceMap, ReadUpdate } from '../types'
 
 interface SSEHandlers {
-  onMessage:  (msg: Message) => void
-  onPresence: (presence: PresenceMap) => void
-  onRead:     (update: ReadUpdate) => void
-  onDeleted:  (messageId: number) => void
-  getLastId:  () => number
+  onMessage:    (msg: Message) => void
+  onPresence:   (presence: PresenceMap) => void
+  onRead:       (update: ReadUpdate) => void
+  onDeleted:    (messageId: number) => void
+  onCallSignal: (signal: CallSignal) => void
+  getLastId:    () => number
 }
 
-export function useSSE({ onMessage, onPresence, onRead, onDeleted, getLastId }: SSEHandlers) {
-  const handlersRef = useRef<SSEHandlers>({ onMessage, onPresence, onRead, onDeleted, getLastId })
+export function useSSE({ onMessage, onPresence, onRead, onDeleted, onCallSignal, getLastId }: SSEHandlers) {
+  const handlersRef = useRef<SSEHandlers>({ onMessage, onPresence, onRead, onDeleted, onCallSignal, getLastId })
   useEffect(() => {
-    handlersRef.current = { onMessage, onPresence, onRead, onDeleted, getLastId }
+    handlersRef.current = { onMessage, onPresence, onRead, onDeleted, onCallSignal, getLastId }
   })
 
   useEffect(() => {
@@ -46,6 +47,11 @@ export function useSSE({ onMessage, onPresence, onRead, onDeleted, getLastId }: 
         es.addEventListener('deleted', (e: Event) => {
           const data = JSON.parse((e as MessageEvent<string>).data) as { message_id: number }
           handlersRef.current.onDeleted(data.message_id)
+        })
+
+        es.addEventListener('call_signal', (e: Event) => {
+          const data = JSON.parse((e as MessageEvent<string>).data) as CallSignal
+          handlersRef.current.onCallSignal(data)
         })
 
         es.addEventListener('reconnect', () => {

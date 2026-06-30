@@ -53,6 +53,7 @@ set_time_limit(0);
 $last_msg_id     = (int)($_GET['last_id'] ?? 0);
 $last_read_ts    = date('Y-m-d H:i:s', time() - 2);
 $last_deleted_ts = date('Y-m-d H:i:s', time() - 2);
+$last_signal_id  = (int)db()->query('SELECT COALESCE(MAX(id), 0) FROM call_signals')->fetchColumn();
 $start        = time();
 $timeout      = 28;
 $tick         = 0;
@@ -127,6 +128,25 @@ while (!connection_aborted() && (time() - $start) < $timeout) {
         sse('deleted', ['message_id' => (int)$d['id']]);
     }
     $last_deleted_ts = $now;
+
+    // 通話シグナル（offer/answer/ice/hangup等）の配信
+    $stmt4 = db()->prepare('
+        SELECT cs.id, cs.from_user_id, u.name AS from_name, cs.type, cs.payload
+        FROM call_signals cs
+        JOIN users u ON u.id = cs.from_user_id
+        WHERE cs.id > :last AND cs.to_user_id = :uid
+        ORDER BY cs.id ASC
+    ');
+    $stmt4->execute([':last' => $last_signal_id, ':uid' => $uid]);
+    foreach ($stmt4->fetchAll() as $cs) {
+        sse('call_signal', [
+            'from_user_id' => (int)$cs['from_user_id'],
+            'from_name'    => $cs['from_name'],
+            'type'         => $cs['type'],
+            'payload'      => json_decode($cs['payload'], true),
+        ]);
+        $last_signal_id = max($last_signal_id, (int)$cs['id']);
+    }
 
     $tick++;
     if ($tick % 8 === 0) {

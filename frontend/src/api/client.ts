@@ -171,4 +171,11 @@ export const api = {
       body: JSON.stringify(data),
     })
   },
+
+  sendCallSignal(to_user_id: number, type: string, payload: unknown) {
+    return req<{ ok: boolean }>('/calls/index.php', {
+      method: 'POST',
+      body: JSON.stringify({ to_user_id, type, payload }),
+    })
+  },
 }
