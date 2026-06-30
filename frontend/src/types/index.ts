@@ -33,7 +33,7 @@ export interface ReadUpdate {
   read_by: number[]
 }
 
-export type CallSignalType = 'offer' | 'answer' | 'ice' | 'hangup' | 'reject' | 'busy'
+export type CallSignalType = 'offer' | 'answer' | 'ice' | 'hangup' | 'reject' | 'busy' | 'ringing' | 'cancel'
 
 export interface CallSignal {
   from_user_id: number

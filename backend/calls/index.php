@@ -15,7 +15,7 @@ $input = json_decode(file_get_contents('php://input'), true) ?? [];
 $toId  = (int)($input['to_user_id'] ?? 0);
 $type  = (string)($input['type'] ?? '');
 
-$allowedTypes = ['offer', 'answer', 'ice', 'hangup', 'reject', 'busy'];
+$allowedTypes = ['offer', 'answer', 'ice', 'hangup', 'reject', 'busy', 'ringing', 'cancel'];
 if ($toId <= 0 || !in_array($type, $allowedTypes, true)) {
     http_response_code(400);
     exit(json_encode(['error' => '不正なシグナルです']));

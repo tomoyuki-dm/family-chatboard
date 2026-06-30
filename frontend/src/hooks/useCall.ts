@@ -8,6 +8,7 @@ interface IncomingCall {
   fromUserId: number
   fromName: string
   offer: RTCSessionDescriptionInit
+  callId: string
 }
 
 const ICE_SERVERS: RTCIceServer[] = [
@@ -32,6 +33,27 @@ async function capAudioBitrate(pc: RTCPeerConnection): Promise<void> {
   }
 }
 
+// CANCEL相当の信号を一定間隔で複数回再送する（応答は待たない・UIとは無関係にバックグラウンドで完結）
+const CANCEL_RETRY_INTERVAL_MS = 2000
+const CANCEL_RETRY_MAX_ATTEMPTS = 6 // 約10秒間、合計6回試行
+
+function sendCancelWithRetry(targetId: number, callId: string | null): void {
+  let attempts = 0
+  const send = () => { void api.sendCallSignal(targetId, 'cancel', { callId }) }
+  send()
+  const retryId = window.setInterval(() => {
+    attempts++
+    if (attempts >= CANCEL_RETRY_MAX_ATTEMPTS) {
+      window.clearInterval(retryId)
+      return
+    }
+    send()
+  }, CANCEL_RETRY_INTERVAL_MS)
+}
+
+// INVITE相当(offer)を一定間隔で再送する。ringing/answer等を受けたら呼び出し側で停止させる
+const OFFER_RETRY_INTERVAL_MS = 3000
+
 export function useCall() {
   const [state, setState]       = useState<CallState>('idle')
   const [peerName, setPeerName] = useState('')
@@ -44,6 +66,8 @@ export function useCall() {
   const peerIdRef        = useRef<number | null>(null)
   const pendingIceRef    = useRef<RTCIceCandidateInit[]>([])
   const callTimeoutRef   = useRef<number | null>(null)
+  const offerRetryRef    = useRef<number | null>(null)
+  const callIdRef         = useRef<string | null>(null)
 
   const cleanup = useCallback(() => {
     pcRef.current?.close()
@@ -52,9 +76,14 @@ export function useCall() {
     localStreamRef.current = null
     pendingIceRef.current = []
     peerIdRef.current = null
+    callIdRef.current = null
     if (callTimeoutRef.current !== null) {
       window.clearTimeout(callTimeoutRef.current)
       callTimeoutRef.current = null
+    }
+    if (offerRetryRef.current !== null) {
+      window.clearInterval(offerRetryRef.current)
+      offerRetryRef.current = null
     }
     setState('idle')
     setPeerName('')
@@ -93,7 +122,9 @@ export function useCall() {
 
   const startCall = useCallback(async (peerId: number, peerNameArg: string) => {
     if (state !== 'idle') return
+    const callId = crypto.randomUUID()
     peerIdRef.current = peerId
+    callIdRef.current = callId
     setPeerName(peerNameArg)
     setState('calling')
     try {
@@ -106,11 +137,14 @@ export function useCall() {
       await capAudioBitrate(pc)
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
-      await api.sendCallSignal(peerId, 'offer', { sdp: offer.sdp, type: offer.type })
+
+      const sendOffer = () => { void api.sendCallSignal(peerId, 'offer', { sdp: offer.sdp, type: offer.type, callId }) }
+      sendOffer()
+      offerRetryRef.current = window.setInterval(sendOffer, OFFER_RETRY_INTERVAL_MS)
 
       callTimeoutRef.current = window.setTimeout(() => {
         if (peerIdRef.current === peerId) {
-          void api.sendCallSignal(peerId, 'hangup', {})
+          sendCancelWithRetry(peerId, callId)
           cleanup()
           alert('応答がありませんでした')
         }
@@ -123,9 +157,10 @@ export function useCall() {
 
   const acceptCall = useCallback(async () => {
     if (!incoming) return
-    const { fromUserId, fromName, offer } = incoming
+    const { fromUserId, fromName, offer, callId } = incoming
     setIncoming(null)
     peerIdRef.current = fromUserId
+    callIdRef.current = callId
     setPeerName(fromName)
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -159,11 +194,18 @@ export function useCall() {
   }, [incoming])
 
   const hangup = useCallback(() => {
-    if (peerIdRef.current !== null) {
-      void api.sendCallSignal(peerIdRef.current, 'hangup', {})
+    const target = peerIdRef.current
+    const callId = callIdRef.current
+    if (target !== null) {
+      if (state === 'calling') {
+        // 応答前のキャンセル(CANCEL相当)。UIはここで即座に閉じ、再送はバックグラウンドに任せて結果は待たない
+        sendCancelWithRetry(target, callId)
+      } else {
+        void api.sendCallSignal(target, 'hangup', {})
+      }
     }
     cleanup()
-  }, [cleanup])
+  }, [state, cleanup])
 
   const toggleMute = useCallback(() => {
     const stream = localStreamRef.current
@@ -177,18 +219,61 @@ export function useCall() {
     const { from_user_id, from_name, type, payload } = signal
 
     if (type === 'offer') {
+      const offerPayload = payload as { sdp: string; type: RTCSdpType; callId: string }
+      if (incoming && incoming.fromUserId === from_user_id && incoming.callId === offerPayload.callId) {
+        // 同一通話試行の再送offerとみなし、着信UIはそのまま維持してringingのみ返す
+        void api.sendCallSignal(from_user_id, 'ringing', {})
+        return
+      }
+      if (peerIdRef.current === from_user_id && callIdRef.current === offerPayload.callId) {
+        // 既にこの通話試行を確立済み/処理中 → 再送されたofferとみなし無視
+        return
+      }
       if (state !== 'idle' || incoming) {
         void api.sendCallSignal(from_user_id, 'busy', {})
         return
       }
-      setIncoming({ fromUserId: from_user_id, fromName: from_name, offer: payload as RTCSessionDescriptionInit })
+      setIncoming({
+        fromUserId: from_user_id,
+        fromName: from_name,
+        offer: { sdp: offerPayload.sdp, type: offerPayload.type },
+        callId: offerPayload.callId,
+      })
       setState('ringing')
+      void api.sendCallSignal(from_user_id, 'ringing', {})
+      return
+    }
+
+    if (type === 'cancel') {
+      // 応答前のキャンセル(CANCEL相当)。peerIdRefがまだ未設定の着信中(ringing)でも処理できるようガード外で扱う。
+      // 同一相手への別の通話試行(callId不一致)まで誤って巻き込まないようcallIdで照合する
+      const cancelCallId = (payload as { callId?: string } | null)?.callId ?? null
+      if (incoming && incoming.fromUserId === from_user_id && incoming.callId === cancelCallId) {
+        setIncoming(null)
+        setState('idle')
+        return
+      }
+      if (peerIdRef.current === from_user_id && callIdRef.current === cancelCallId) {
+        cleanup()
+      }
       return
     }
 
     if (peerIdRef.current !== from_user_id) return
 
+    if (type === 'ringing') {
+      if (offerRetryRef.current !== null) {
+        window.clearInterval(offerRetryRef.current)
+        offerRetryRef.current = null
+      }
+      return
+    }
+
     if (type === 'answer') {
+      if (offerRetryRef.current !== null) {
+        window.clearInterval(offerRetryRef.current)
+        offerRetryRef.current = null
+      }
       if (callTimeoutRef.current !== null) {
         window.clearTimeout(callTimeoutRef.current)
         callTimeoutRef.current = null
